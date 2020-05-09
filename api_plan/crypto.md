@@ -1,6 +1,6 @@
 # BOT COMMUNICATION PROTOCOL PROPOSAL
 
-## HTTP REST API && DISCORD-BASED PUBLIC KEY AUTHENTICATION
+### HTTP REST API && DISCORD-BASED PUBLIC KEY AUTHENTICATION
 
 ## PART 1 - PUBLIC KEY AUTHENTICATION
 An external bot attempting to communicate using authentication-requiring endpoints shall generate an ECDSA kpublic-private key pair for itself, whose expiration must be at most one month after its creation.
