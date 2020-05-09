@@ -1,5 +1,7 @@
 from aiohttp import web
+import inspect
 import base64
+from typing import Union
 from Crypto.Hash import SHA256
 from Crypto.PublicKey import ECC
 from Crypto.Signature import DSS
@@ -23,40 +25,36 @@ def verify_signature(text,signature,pkey):
     except ValueError:
         return False
 
-def handle_signed_request(request, server):
-    try:
-        account = server.get_account(request.query['id'])
-    except Exception as e:
-        return False
-    signature = request.query['signature']
-    crypto_text = "&".join([ f for f in request.text.split("&") if f[:9] is not "signature" ]) + "&"
-    h = SHA256.new(text.encode('utf-8'))
+async def handle_signed_request(request, account, server):
+    signature = bytes.fromhex((await request.post())['signature'])
+    crypto_text = "&".join([ f for f in (await request.text()).split("&") if f[:9] != "signature" ]) + "&"
+    h = SHA256.new(crypto_text.encode('utf-8'))
     for key in account.list_public_keys():
         verifier = DSS.new(key,'fips-186-3')
         try:
-            verifier.verify(h,crypto_text)
+            verifier.verify(h,signature)
             return True
         except ValueError:
             pass
     return False
 
-def check_acc_name(account_name: Union[str, AccountId]) -> AccountId:
+def check_acc_name(account_name: Union[str, accounting.AccountId]) -> accounting.AccountId:
     if isinstance(account_name, str):
         return accounting.parse_account_id(account_name)
     else:
         return account_name
 
-def web_assert_is_account(account_name: Union[str, AccountId], server: Server) -> Account:
+def web_assert_is_account(account_name: Union[str, accounting.AccountId], server: accounting.Server) -> accounting.Account:
     account_name = check_acc_name(account_name)
     if not server.has_account(account_name):
-        raise web.HttpBadRequest(f'No such account: {account_name}')
+        raise web.HTTPBadRequest(body=f'No such account: {account_name}')
     else:
-        return self.server.get_account(account_name)
+        return server.get_account(account_name)
 
-def web_assert_authorized(account_name: Union[str, AccountId], server: Server, auth_level: accounting.Authorization) -> Account:
+def web_assert_authorized(account_name: Union[str, accounting.AccountId], server: accounting.Server, auth_level: accounting.Authorization) -> accounting.Account:
     account = web_assert_is_account(account_name,server)
     if account.get_authorization().value < auth_level.value:
-        raise web.HttpForbidden('Unauthorized command')
+        raise web.HTTPForbidden(body='Unauthorized command')
     else:
         return account
 
@@ -67,7 +65,7 @@ class RestEndpoint:
         self.server = server
 
         for method_name in ('POST', 'GET', 'PUT', 'DELETE'):
-            method = getattr(self, method.name.lower(), None)
+            method = getattr(self, method_name.lower(), None)
             if method:
                 self.register_method(method_name, method)
 
@@ -77,58 +75,60 @@ class RestEndpoint:
     async def dispatch(self, request: web.Request):
         method = self.methods.get(request.method.upper())
         if not method:
-            raise web.HttpMethodNotAllowed('', ('POST''GET','PUT','DELETE')
+            raise web.HTTPMethodNotAllowed('', ('POST''GET','PUT','DELETE'))
 
         wanted_args = list(inspect.signature(method).parameters.keys())
-        available_args = request.match_info.copy()
+        available_args = request.query.copy()
+        available_args.update(await request.post())
         available_args.update({'request':request})
 
-        if request.method.lower() == "POST":
+        if request.method.upper() == "POST":
             try:
-                if handle_signed_request(req,server):
-                    available_args.update({'caller':self.server.get_account(request.query['id'])})
+                acc = web_assert_is_account(available_args['id'], self.server)
+                if await handle_signed_request(request,acc,self.server):
+                    available_args.update({'caller':available_args['id']})
                 else:
-                    raise web.HTTPForbidden('Bad signature')
+                    raise web.HTTPForbidden(body='Bad signature')
             except KeyError:
-                raise web.HttpBadRequest('"id" and "signature" fields required for POST endpoints.')
+                raise web.HTTPBadRequest(body='"id" and "signature" fields required for POST endpoints.')
 
         unsatisfied_args = set(wanted_args) - set(available_args.keys())
         if unsatisfied_args:
-            raise web.HttpBadRequest('Unsatisfied parameters')
+            raise web.HTTPBadRequest(body='Unsatisfied parameters')
 
         return await method(**{arg_name: available_args[arg_name] for arg_name in wanted_args})
 
 class BalanceEndpoint(RestEndpoint):
 
-    async def post(self, request,caller,account) -> Response:
+    async def post(self, request,caller,account) -> web.Response:
         account_id = accounting.parse_account_id(account)
-        if self.server.has_account()):
-            raise web.HttpBadRequest('No such account')
+        if not self.server.has_account(account_id):
+            raise web.HTTPBadRequest(body='No such account')
         if caller != account:
             web_assert_authorized(caller,server,accounting.Authorization.ADMIN)
 
-        return web.Response(text=json.stringify({
+        return web.Response(text=json.dumps({
             'account':caller,
             'value':self.server.get_account(account_id).get_balance()
             }))
 
 class AddPubKeyEndpoint(RestEndpoint):
 
-    async def get(self, account, pubkey):
+    async def get(self, account, pubkey) -> web.Response:
         account = web_assert_is_account(account, self.server)
         try:
-            key = base64.decodestring(bytes.fromhex(pubkey).decode('utf-8'))
+            key = base64.decodebytes(bytes.fromhex(pubkey)).decode('utf-8')
             key = ECC.import_key(key)
         except Exception as e:
-            raise web.HttpBadRequest('"pubkey" parameter should be hex encoded utf-8 encoded base64 of a pem file containing an ECDSA public key')
-        server.add_public_key(account_key)
+            raise web.HTTPBadRequest(body='"pubkey" parameter should be hex encoded utf-8 encoded base64 of a pem file containing an ECDSA public key')
+        self.server.add_public_key(account,key)
         return web.Response(text='')
 
 class AddAccountEndpoint(RestEndpoint):
 
-    async def get(self, account):
+    async def get(self, account) -> web.Response:
        account = check_acc_name(account)
-       server.open_account(account)
+       self.server.open_account(account)
        return web.Response(text='')
 
 class RestApi:
@@ -136,12 +136,12 @@ class RestApi:
         self.router = router
         self.prefix = prefix
 
-        self.add_route('balance', BalandeEndpoint(server))
+        self.add_route('balance', BalanceEndpoint(server))
         self.add_route('addpubkey',AddPubKeyEndpoint(server))
         self.add_route('openaccount',AddAccountEndpoint(server))
 
     def add_route(self, path:str, endp : RestEndpoint):
-        self.router.add_route(self.prefix + path,endp.dispatch)
+        self.router.add_route('*',self.prefix + path,endp.dispatch)
 
 
 

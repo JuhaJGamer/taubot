@@ -149,10 +149,11 @@ if __name__ == '__main__':
         app = web.Application()
         app.router.add_get('/api/v1/', RequestServer(server, None).handle_request)
         api = httpv2.RestApi('/api/v2/',app.router, server)
-        loop.create_task(web._run_app(app))
+        loop.create_task(web._run_app(app,port=8888))
 
         # # Run the Discord bot.
         # if 'discord_token' in config:
         #     discord_client.run(config['discord_token'])
         # else:
         #     asyncio.get_event_loop().run_forever()
+        asyncio.get_event_loop().run_forever()
