@@ -11,6 +11,7 @@ from accounting import LedgerServer, Authorization, RedditAccountId, DiscordAcco
 from commands import COMMANDS, list_commands_as_markdown, CommandException, assert_authorized, process_command
 from utils import split_into_chunks, discord_postprocess
 from httpapi import RequestServer
+import httpv2
 
 # move this to config?
 prefix = "e!"
@@ -99,58 +100,59 @@ async def comment_loop(reddit, server):
         await asyncio.sleep(5)
 
 if __name__ == '__main__':
-    config = read_config()
-    reddit = create_reddit(config)
-    discord_client = discord.Client()
+    # config = read_config()
+    # reddit = create_reddit(config)
+    # discord_client = discord.Client()
 
-    @discord_client.event
-    async def on_message(message):
-        if message.author == discord_client.user:
-            return
+    # @discord_client.event
+    # async def on_message(message):
+    #     if message.author == discord_client.user:
+    #         return
 
-        content = message.content.lstrip()
-        prefixes = (
-            '<@%s>' % discord_client.user.id,
-            '<@!%s>' % discord_client.user.id,
-            'e!')
+    #     content = message.content.lstrip()
+    #     prefixes = (
+    #         '<@%s>' % discord_client.user.id,
+    #         '<@!%s>' % discord_client.user.id,
+    #         'e!')
 
-        if content.startswith(prefixes): # Checking all messages that start with the prefix.
-            prefix = [prefix for prefix in prefixes if content.startswith(prefix)][0]
-            command_content = content[len(prefix):].lstrip()
-            response = discord_postprocess(
-                process_command(
-                    DiscordAccountId(str(message.author.id)),
-                    command_content,
-                    server,
-                    prefixes[0] + ' '))
+    #     if content.startswith(prefixes): # Checking all messages that start with the prefix.
+    #         prefix = [prefix for prefix in prefixes if content.startswith(prefix)][0]
+    #         command_content = content[len(prefix):].lstrip()
+    #         response = discord_postprocess(
+    #             process_command(
+    #                 DiscordAccountId(str(message.author.id)),
+    #                 command_content,
+    #                 server,
+    #                 prefixes[0] + ' '))
 
-            chunks = split_into_chunks(response.encode('utf-8'), 1024)
-            embed = discord.Embed(color=0x3b4dff)
-            title = command_content.split()[0] if len(command_content.split()) > 0 else 'Empty Message'
-            for i, chunk in enumerate(chunks):
-                title = "(cont'd)" if i > 0 else title
-                embed.add_field(name=title, value=chunk.decode('utf-8'), inline=False)
+    #         chunks = split_into_chunks(response.encode('utf-8'), 1024)
+    #         embed = discord.Embed(color=0x3b4dff)
+    #         title = command_content.split()[0] if len(command_content.split()) > 0 else 'Empty Message'
+    #         for i, chunk in enumerate(chunks):
+    #             title = "(cont'd)" if i > 0 else title
+    #             embed.add_field(name=title, value=chunk.decode('utf-8'), inline=False)
 
-            embed.set_thumbnail(url=message.author.avatar_url)
-            embed.set_footer(text="This was sent in response to %s's message; you can safely disregard it if that's not you." % message.author.name)
+    #         embed.set_thumbnail(url=message.author.avatar_url)
+    #         embed.set_footer(text="This was sent in response to %s's message; you can safely disregard it if that's not you." % message.author.name)
 
-            await message.channel.send(embed=embed)
+    #         await message.channel.send(embed=embed)
 
     with LedgerServer('ledger.txt') as server:
         loop = asyncio.get_event_loop()
 
-        # Run the Reddit bot.
-        asyncio.get_event_loop().create_task(tick_loop(server))
-        asyncio.get_event_loop().create_task(message_loop(reddit, server))
-        asyncio.get_event_loop().create_task(comment_loop(reddit, server))
+        # # Run the Reddit bot.
+        # asyncio.get_event_loop().create_task(tick_loop(server))
+        # asyncio.get_event_loop().create_task(message_loop(reddit, server))
+        # asyncio.get_event_loop().create_task(comment_loop(reddit, server))
 
         # Run the HTTP server.
         app = web.Application()
-        app.router.add_get('/', RequestServer(server, None).handle_request)
+        app.router.add_get('/api/v1/', RequestServer(server, None).handle_request)
+        api = httpv2.RestApi('/api/v2/',app.router, server)
         loop.create_task(web._run_app(app))
 
-        # Run the Discord bot.
-        if 'discord_token' in config:
-            discord_client.run(config['discord_token'])
-        else:
-            asyncio.get_event_loop().run_forever()
+        # # Run the Discord bot.
+        # if 'discord_token' in config:
+        #     discord_client.run(config['discord_token'])
+        # else:
+        #     asyncio.get_event_loop().run_forever()
