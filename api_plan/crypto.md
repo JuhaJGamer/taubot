@@ -1,8 +1,8 @@
-#BOT COMMUNICATION PROTOCOL PROPOSAL
+# BOT COMMUNICATION PROTOCOL PROPOSAL
 
-##HTTP REST API && DISCORD-BASED PUBLIC KEY AUTHENTICATION
+## HTTP REST API && DISCORD-BASED PUBLIC KEY AUTHENTICATION
 
-##PART 1 - PUBLIC KEY AUTHENTICATION
+## PART 1 - PUBLIC KEY AUTHENTICATION
 An external bot attempting to communicate using authentication-requiring endpoints shall generate an ECDSA kpublic-private key pair for itself, whose expiration must be at most one month after its creation.
 An external bot shall, upon request, use a discord command to submit their own ECDSA public key to the currency bot's key database. Said key will remain in the databse until it's expiration, at which point it will be deleted, and the bot should request a new key be added to the database before it is allowed to communicate any further.
 
@@ -35,7 +35,7 @@ request += sign(request)
 
 A basic python implementation of the request protocol can be found in cryptoproof.py
 
-##PART 2 - HTTP REST API
+## PART 2 - HTTP REST API
 
 An external bot attempting to communicate with or without authentication will send a HTTP request to one of this bot's HTTP REST endpoints
 
@@ -78,7 +78,7 @@ Each HTTP REST endpoint should output a status code based on handling of the req
 500 - Server error while handling request. Data returned can be a human-readable error line, but as the client cannot do anything about this happening, best to return nothing.
 ```
 
-##PART 3 - ENCRYPTION OF COMMUNICATIONS
+## PART 3 - ENCRYPTION OF COMMUNICATIONS
 
 Encryption shall be done through HTTPS using a "reverse proxy", such as `nginx`. This reverse proxy is to be configured to act as a sort of "encryption tunnel" through which the server and the foreign bot will communicate. Requests meant to the server will be sent encrypted to the reverse proxy, which decrypts them and passes them on to the server as unencrypted HTTP traffic.
 
