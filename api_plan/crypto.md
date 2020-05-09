@@ -3,7 +3,7 @@
 ### HTTP REST API && DISCORD-BASED PUBLIC KEY AUTHENTICATION
 
 ## PART 1 - PUBLIC KEY AUTHENTICATION
-An external bot attempting to communicate using authentication-requiring endpoints shall generate an ECDSA kpublic-private key pair for itself, whose expiration must be at most one month after its creation.
+An external bot attempting to communicate using authentication-requiring endpoints shall generate an ECDSA public-private key pair for itself, whose expiration must be at most one month after its creation.
 An external bot shall, upon request, use a discord command to submit their own ECDSA public key to the currency bot's key database. Said key will remain in the databse until it's expiration, at which point it will be deleted, and the bot should request a new key be added to the database before it is allowed to communicate any further.
 
 For communication with the HTTP REST API the bot shall send a message to the endpoint as usual, but for any command requiring authorization, the parameters will contain an 'id' field, an account identifier, and a 'signature', containing a hexadecimal ECDSA signature of the rest of the request. Any authenticatable HTTP request will then look like:
