@@ -8,26 +8,9 @@ from Crypto.Signature import DSS
 import json
 import accounting, commands
 
-def sign_text(text,key):
-    key = ECC.import_key(key)
-    h = SHA256.new(text.encode('utf-8'))
-    signer = DSS.new(key, 'fips-186-3')
-    signature = signer.sign(h)
-    return signature
-
-def verify_signature(text,signature,pkey):
-    key = ECC.import_key(pkey)
-    h = SHA256.new(text.encode('utf-8'))
-    verifier = DSS.new(key, 'fips-186-3')
-    try:
-        verifier.verify(h, signature)
-        return True
-    except ValueError:
-        return False
-
-async def handle_signed_request(request, account, server):
+async def handle_signed_request(request:web.Request, account:accounting.Account, server:accounting.Server) -> bool:
     signature = bytes.fromhex((await request.post())['signature'])
-    crypto_text = "&".join([ f for f in (await request.text()).split("&") if f[:9] != "signature" ]) + "&"
+    crypto_text = "&".join(filter(lambda s: s[:9] != "signature", (await request.text()).split("&"))) + "&"
     h = SHA256.new(crypto_text.encode('utf-8'))
     for key in account.list_public_keys():
         verifier = DSS.new(key,'fips-186-3')
@@ -131,6 +114,14 @@ class AddAccountEndpoint(RestEndpoint):
        self.server.open_account(account)
        return web.Response(text='')
 
+class StaticTextEndpoint(RestEndpoint):
+    def __init__(self,server:accounting.Server,text:str=""):
+        super().__init__(server)
+        self.text = text
+
+    async def get(self) -> web.Response:
+        return web.Response(body=self.text)
+
 class RestApi:
     def __init__(self, prefix, router, server):
         self.router = router
@@ -139,6 +130,9 @@ class RestApi:
         self.add_route('balance', BalanceEndpoint(server))
         self.add_route('addpubkey',AddPubKeyEndpoint(server))
         self.add_route('openaccount',AddAccountEndpoint(server))
+
+        # Don't delete this
+        self.add_route('credits',StaticTextEndpoint(server,"Developer credits:\n turncoat (u/jedi-turncoat) – Lead programmer\n gamingdiamond982 (u/gamingdiamond982) – Programmer\n BTernaryTau (u/BTernaryTau) – Programmer\n Dodowarrior44 (u/Dodowarrior44) – Programmer\n kamray23 (u/JuhaJGam3R) – API Programmer\n\nSpecial thanks:\n Mythrows – Emotional support animal"))
 
     def add_route(self, path:str, endp : RestEndpoint):
         self.router.add_route('*',self.prefix + path,endp.dispatch)
